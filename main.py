@@ -1,86 +1,131 @@
 import numpy as np
+import cv2 as cv
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from PIL import Image, ImageFilter
 
-def convert_image_to_gray_matrix(image_path):
-    """
-    конвертация изображения в градации серого.
-    :param image_path: путь к изображению, которое конвертируется.
-    :return: Матрица (numpy array), представляющая изображение в градациях серого.
-    """
-    img = Image.open(image_path)
-    gray_img = img.convert('L') # 'L' - режим для градаций серого
-    gray_matrix = np.array(gray_img)
-    return gray_matrix
+def load_image_as_gray(image_path):
+ img = Image.open(image_path)
+ grayscale_image = img.convert('L')  # 'L' - режим для градаций серого
+ return np.array(grayscale_image)
 
-def save_matrix_as_image(matrix, output_image_path):
-    """
-    сохранение изображения
-    """
-    new_image = Image.fromarray(matrix.astype(np.uint8))
-    new_image.save(output_image_path)
+def save_image_from_matrix(matrix, output_path):
+ img = Image.fromarray(matrix.astype(np.uint8))
+ img.save(output_path)
 
-def calculate_moments(histogram):
-    """
-    вычисление моменты и центральные моменты заданного гистограммы.
-    :param histogram: представляющая распределение значений
-    :return: кортеж из моментов (m1, m2, m3, m4) и центральных моментов (u1, u2, u3, u4)
-    """
-    m1 = np.sum(histogram * np.arange(len(histogram))) # Первый момент (среднее значение)
-    print(f"Первый момент (M1): Σ (x_i * p_i) = Σ [{' ,'.join(map(str, histogram))}] * [{' ,'.join(map(str, np.arange(len(histogram))))}] = {m1}")
-    m2 = np.sum(histogram * (np.arange(len(histogram)) ** 2))
-    print(f"Второй момент (M2): Σ (x_i^2 * p_i) = Σ [{' ,'.join(map(str, histogram))}] * [{' ,'.join(map(str, np.arange(len(histogram)) ** 2))}] = {m2}")
-    m3 = np.sum(histogram * (np.arange(len(histogram)) ** 3))
-    print(f"Третий момент (M3): Σ (x_i^3 * p_i) = Σ [{' ,'.join(map(str, histogram))}] * [{' ,'.join(map(str, np.arange(len(histogram)) ** 3))}] = {m3}")
-    m4 = np.sum(histogram * (np.arange(len(histogram)) ** 4))
-    print(f"Четвертый момент (M4): Σ (x_i^4 * p_i) = Σ [{' ,'.join(map(str, histogram))}] * [{' ,'.join(map(str, np.arange(len(histogram)) ** 4))}] = {m4}")
+def compute_image_moments(histogram):
+    with open('compute_image_moments.log', 'w', encoding='utf-8') as log_file:
+        total_pixels = np.sum(histogram)
+        log_file.write(f"Общее количество пикселей: {total_pixels}\n\n")
+        first_moment = np.sum(histogram * np.arange(len(histogram)))
+        log_file.write(f"Первый момент (M1): M1 = Σ (h[i] * i) = {first_moment}\n")
+        second_moment = np.sum(histogram * (np.arange(len(histogram)) ** 2))
+        log_file.write(f"Второй момент (M2): M2 = Σ (h[i] * i^2) = {second_moment}\n")
+        third_moment = np.sum(histogram * (np.arange(len(histogram)) ** 3))
+        log_file.write(f"Третий момент (M3): M3 = Σ (h[i] * i^3) = {third_moment}\n")
+        fourth_moment = np.sum(histogram * (np.arange(len(histogram)) ** 4))
+        log_file.write(f"Четвертый момент (M4): M4 = Σ (h[i] * i^4) = {fourth_moment}\n\n")
+        central_first = first_moment / total_pixels
+        log_file.write(f"Центральный первый момент: μ1 = M1 / N = {first_moment} / {total_pixels} = {central_first}\n")
+        central_second = (second_moment / total_pixels) - (central_first ** 2)
+        log_file.write(f"Центральный второй момент: μ2 = (M2 / N) - μ1^2 = ({second_moment} / {total_pixels}) - ({central_first}^2) = {central_second}\n")
+        central_third = (third_moment / total_pixels) - (3 * central_first * central_second) - (central_first ** 3)
+        log_file.write(f"Центральный третий момент: μ3 = (M3 / N) - 3 * μ1 * μ2 - μ1^3 = ({third_moment} / {total_pixels}) - 3 * {central_first} * {central_second} - ({central_first}^3) = {central_third}\n")
+        central_fourth = (fourth_moment / total_pixels) - (4 * central_first * central_third) - (6 * central_first ** 2 * central_second) - (central_second ** 2)
+        log_file.write(f"Центральный четвертый момент: μ4 = (M4 / N) - 4 * μ1 * μ3 - 6 * μ1^2 * μ2 - μ2^2 = ({fourth_moment} / {total_pixels}) - 4 * {central_first} * {central_third} - 6 * ({central_first}^2) * {central_second} - ({central_second}^2) = {central_fourth}\n")
+    return (first_moment, second_moment, third_moment, fourth_moment), (central_first, central_second, central_third, central_fourth)
 
-    u1 = m1 / np.sum(histogram) # Первый центральный момент (среднее значение)
-    print(f"Первый центральный момент (U1): M1 / N = {m1} / {np.sum(histogram)} = {u1}")
-    u2 = (m2 / np.sum(histogram)) - (u1 ** 2) # Второй центральный момент (дисперсия)
-    print(f"Второй центральный момент (U2): M2/N - U1^2 = ({m2} / {np.sum(histogram)}) - {u1 ** 2} = {m2 / np.sum(histogram)} - {u1 ** 2} = {u2}")
-    u3 = (m3 / np.sum(histogram)) - (3 * u1 * u2) - (u1 ** 3) # Третий центральный момент
-    print(f"Третий центральный момент (U3): M3/N - 3*U1*U2 - U1^3 = ({m3} / {np.sum(histogram)}) - ({3} * {u1} * {u2}) - {u1 ** 3} = {m3 / np.sum(histogram)} - {3 * u1 * u2} - {u1 ** 3} = {u3}")
-    u4 = (m4 / np.sum(histogram)) - (4 * u1 * u3) - (6 * u1 ** 2 * u2) - (u2 ** 2) # Четвертый центральный момент
-    print(f"Четвертый центральный момент (U4): M4/N - 4*U1*U3 - 6*U1^2*U2 - U2^2 = ({m4} / {np.sum(histogram)}) - ({4} * {u1} * {u3}) - ({6} * {u1} ** {2} * {u2}) - {u2 ** 2} = {m4 / np.sum(histogram)} - {4 * u1 * u3} - {6 * u1 ** 2 * u2} - {u2 ** 2} = {u4} ")
+def calculate_image_entropy(histogram):
+ total_pixels = np.sum(histogram)
+ probabilities = histogram[histogram > 0] / total_pixels
+ entropy = -np.sum(probabilities * np.log2(probabilities))
+ return entropy
 
-    return (m1, m2, m3, m4), (u1, u2, u3, u4)
+def calculate_redundancy_from_entropy(entropy):
+ max_entropy = np.log2(256)
+ return max_entropy - entropy
 
-def calculate_entropy(histogram):
-    """
-    вычисление энтропии
-    :param histogram: представляющая распределение значений
-    :return: энтропия (entropy)
-    """
-    total_pixels = np.sum(histogram) # сумма общее количество пикселей в гистограмме
-    probabilities = histogram[histogram > 0] / total_pixels # вероятность для каждого ненулевого значения гистограммы
-    entropy = -np.sum(probabilities * np.log2(probabilities))
+def block_based_quantization(matrix, block_size=8):
+ height, width = matrix.shape
+ quantized_matrix = np.zeros_like(matrix)
+ for i in range(0, height, block_size):
+  for j in range(0, width, block_size):
+   block = matrix[i:i+block_size, j:j+block_size]
+   quantized_block = np.clip(block // 16 * 16, 0, 255)
+   quantized_matrix[i:i+block_size, j:j+block_size] = quantized_block
+   return quantized_matrix
 
-    print("Расчет энтропии")
-    print(f"Общее количество пикселей (N): Σ [{' ,'.join(map(str, histogram))}] = {total_pixels}")
-    print(f"Вероятности (p_i): [{' ,'.join(map(str, histogram[histogram > 0]))}] / {total_pixels} =  [{' ,'.join(map(str, probabilities))}]")
+def compute_standard_deviation(variance):
+ return np.sqrt(variance)
 
-    print("Формула для расчета энтропии: H = -Σ (p_i * log2(p_i))")
-    results = []
-    for p in probabilities:
-        print(f"- ({p:.4f} * log2({p:.4f})) = {- (p * np.log2(p))}")
-        results.append(- (p * np.log2(p)))
+def shift_image(image, tx, ty):
+    translated_image = Image.new("L", image.size)
+    with open('shift_image.log', 'w') as log_file:
+        log_file.write(f"Начинаем с изображения размером: {image.size}\n")
+        log_file.write(f"Смещение по X: {tx}, Смещение по Y: {ty}\n")
+        for x in range(image.width):
+            for y in range(image.height):
+                new_x = x + tx
+                new_y = y + ty
+                if 0 <= new_x < image.width and 0 <= new_y < image.height:
+                    pixel_value = image.getpixel((x, y))
+                    translated_image.putpixel((new_x, new_y), pixel_value)
+                    log_file.write(f"Перемещаем пиксель из ({x}, {y}) в ({new_x}, {new_y}) с значением: {pixel_value}\n")
+                else:
+                    log_file.write(f"Пиксель ({x}, {y}) не может быть перемещен в ({new_x}, {new_y}), выходит за пределы изображения.\n")
+    return translated_image
 
-    print(f"H = {' + '.join(map(str, results))} = {entropy}")
+def rotate_and_resize(image, angle, scale):
+    with open('rotate_and_resize.log', 'w') as log_file:
+        log_file.write(f"Исходный размер изображения: {image.size}\n")
+        log_file.write(f"Угол поворота: {angle} градусов\n")
+        log_file.write(f"Коэффициент масштабирования: {scale}\n")
 
-    return entropy
+        rotated_image = image.rotate(angle)
+        width, height = rotated_image.size
+        log_file.write(f"Размер изображения после поворота: {rotated_image.size}\n")
 
-def calculate_redundancy(entropy):
-    """
-    избыточность на основе энтропии
-    :param entropy: энтропия
-    :return: float: избыточность
-    """
-    max_entropy = np.log2(256) # max энтропия для 256 градаций серого (8 бит)
-    redundancy = max_entropy - entropy # избыточность
-    print(f"Формула для избыточности (R): R = H_max - H = {max_entropy} - {entropy} = {redundancy:.4f} бит")
-    return redundancy
+        new_width = int(width * scale)
+        new_height = int(height * scale)
+        resized_image = rotated_image.resize((new_width, new_height), Image.LANCZOS)
+        log_file.write(f"Размер изображения после изменения размера: {resized_image.size}\n")
+    return resized_image
+
+
+def apply_kernel_filter(image, kernel):
+ kernel_size = int(np.sqrt(len(kernel)))
+ return image.filter(ImageFilter.Kernel((kernel_size, kernel_size), np.array(kernel).flatten(), scale=None))
+
+def median_filter(image, size):
+ return image.filter(ImageFilter.MedianFilter(size=size))
+
+def calculate_mse_between_images(original, filtered):
+    with open('calculate_mse_between_images.log', 'w') as log_file:
+        original_array = np.array(original)
+        filtered_array = np.array(filtered)
+        log_file.write(f"Размер оригинального изображения: {original_array.shape}\n")
+        log_file.write(f"Размер отфильтрованного изображения: {filtered_array.shape}\n")
+        if original_array.shape != filtered_array.shape:
+            log_file.write("Ошибка: размеры изображений не совпадают!\n")
+            return None
+        difference = original_array - filtered_array
+        log_file.write(f"Разница между изображениями:\n{difference}\n")
+        mse = np.mean(difference ** 2)
+        log_file.write(f"Среднеквадратичная ошибка (MSE): {mse}\n")
+    return mse
+
+def calculate_psnr_between_images(original, filtered):
+    with open('calculate_psnr_between_images.log', 'w') as log_file:
+        mse = calculate_mse_between_images(original, filtered)
+        log_file.write(f"Среднеквадратичная ошибка (MSE): {mse}\n")
+        if mse == 0:
+            log_file.write("MSE равно 0, PSNR бесконечен.\n")
+            return float('inf')
+        max_pixel = 255.0
+        psnr = 20 * np.log10(max_pixel / np.sqrt(mse))
+        log_file.write(f"Максимальное значение пикселя: {max_pixel}\n")
+        log_file.write(f"Вычисленный PSNR: {psnr} дБ\n")
+    return psnr
 
 def plot_brightness_histogram(gray_matrix):
     histogram, bin_edges = np.histogram(gray_matrix, bins=256, range=(0, 255))
@@ -109,145 +154,65 @@ def plot_brightness_histogram(gray_matrix):
     plt.grid()
     plt.show()
 
-def truncated_block_coding(gray_matrix, block_size=8):
-    """
-    усеченное блочное кодирование к матрице
-    :param: gray_matrix (numpy.ndarray): матрица градаций серого изображения, block_size (int): размер блока для кодирования
-    :return: numpy.ndarray: Кодированная матрица градаций серого.
-    """
-
-    height, width = gray_matrix.shape # высота и ширина входной матрицы
-    coded_matrix = np.zeros_like(gray_matrix)
-
-    for i in range(0, height, block_size):
-        for j in range(0, width, block_size):
-            block = gray_matrix[i:i+block_size, j:j+block_size]
-            coded_block = np.clip(block // 16 * 16, 0, 255)
-            coded_matrix[i:i+block_size, j:j+block_size] = coded_block
-
-    return coded_matrix
-
-def calculate_standard_deviation(u2):
-    return np.sqrt(u2)
-
-# Геометрические преобразования
-def translate(image, tx, ty):
-    """Перенос изображения на (tx, ty)."""
-    translated_image = Image.new("L", image.size)
-    for x in range(image.width):
-        for y in range(image.height):
-            if 0 <= x + tx < image.width and 0 <= y + ty < image.height:
-                translated_image.putpixel((x + tx, y + ty), image.getpixel((x, y)))
-    return translated_image
-
-def rotate_and_scale(image, angle, scale):
-    """Поворот и гомотетия изображения."""
-    rotated_image = image.rotate(angle)
-    width, height = rotated_image.size
-    scaled_image = rotated_image.resize((int(width * scale), int(height * scale)), Image.LANCZOS)
-    return scaled_image
-
-def scale_and_rotate(image, scale, angle):
-    """Гомотетия и поворот изображения"""
-    scaled_image = image.resize((int(image.width * scale), int(image.height * scale)), Image.LANCZOS)
-    rotated_image = scaled_image.rotate(angle)
-    return rotated_image
-
-def apply_filter(image, kernel):
-    """свертка с заданным ядром"""
-    kernel_size = int(np.sqrt(len(kernel)))  # размер ядра
-    return image.filter(ImageFilter.Kernel((kernel_size, kernel_size), np.array(kernel).flatten(), scale=None))
-
-def median_filter(image, size):
-    """медианный фильтр"""
-    return image.filter(ImageFilter.MedianFilter(size=size))
-
-def calculate_mse(original, filtered):
-    """ среднеквадратичную ошибку (MSE) между оригинальным и отфильтрованным изображениями"""
-    original_np = np.array(original)
-    filtered_np = np.array(filtered)
-    difference = original_np - filtered_np
-    mse_value = np.mean(difference ** 2)
-    # print(f"Среднеквадратичная ошибка (MSE): (1 / N) * Σ ( [{' ,'.join(map(str, original_np))}] - [{' ,'.join(map(str, filtered_np))}]) ^ 2")
-    return mse_value
-
-def calculate_psnr(original, filtered):
-    """ пиковое отношение сигнал/шум (PSNR) между оригинальным и отфильтрованным изображениями"""
-    mse = calculate_mse(original, filtered)
-    # Если MSE равно 0, изображения идентичны, PSNR бесконечно велико
-    if mse == 0:
-        return float('inf')
-    max_pixel = 255.0 # max значение пикселя для 8-битного изображения
-    psnr_value = 20 * np.log10(max_pixel / np.sqrt(mse))
-
-    # print(f"Пиковое отношение сигнал/шум (PSNR): 20 * log10({max_pixel} / {np.sqrt(mse)}) = 20 * {np.log10(max_pixel / np.sqrt(mse))} = {20 * np.log10(max_pixel / np.sqrt(mse))} дБ")
-
-    return psnr_value
-
 image_path = 'image.jpg'
-gray_matrix = convert_image_to_gray_matrix(image_path)
+gray_image_matrix = load_image_as_gray(image_path)
 
-# Построение гистограммы яркости
-plot_brightness_histogram(gray_matrix)
+plot_brightness_histogram(gray_image_matrix)
 
-# Вычисление моментов
-histogram, _ = np.histogram(gray_matrix, bins=256, range=(0, 255))
-(moments_m, moments_u) = calculate_moments(histogram)
+histogram, _ = np.histogram(gray_image_matrix, bins=256, range=(0, 255))
+(moments, central_moments) = compute_image_moments(histogram)
 
-# Вычисление энтропии и избыточности
-entropy = calculate_entropy(histogram)
-redundancy = calculate_redundancy(entropy)
+entropy_value = calculate_image_entropy(histogram)
+redundancy_value = calculate_redundancy_from_entropy(entropy_value)
+quantized_image = block_based_quantization(gray_image_matrix)
+std_dev_value = compute_standard_deviation(central_moments[1])
 
-coded_matrix = truncated_block_coding(gray_matrix) # Усеченное блочное кодирование
+print("Моменты (m):", moments)
+print("Центральные моменты (u):", central_moments)
+print("Энтропия:", entropy_value)
+print("Избыточность:", redundancy_value)
+print("Стандартное отклонение:", std_dev_value)
+save_image_from_matrix(quantized_image, 'quantized_image.png')
 
-# Вычисление среднеквадратичного отклонения
-std_dev = calculate_standard_deviation(moments_u[1])
+image_for_transformations = Image.open(image_path).convert('L')
+shifted_image = shift_image(image_for_transformations, tx=50, ty=30)
+shifted_image.save('shifted_image.png')
+rotated_resized_image = rotate_and_resize(image_for_transformations, angle=-90, scale=1.5)
+rotated_resized_image.save('rotated_resized_image.png')
+filtered_image_3x3 = median_filter(image_for_transformations, size=3)
+filtered_image_3x3.save("filtered_3x3.jpg")
+mse_3x3 = calculate_mse_between_images(image_for_transformations, filtered_image_3x3)
+psnr_3x3 = calculate_psnr_between_images(image_for_transformations, filtered_image_3x3)
 
-# Вывод результатов
-print("Вывод результатов")
-print("Начальные моменты (m):", moments_m)
-print("Центральные моменты (u):", moments_u)
-print("Энтропия (Н):", entropy)
-print("Избыточность (R):", redundancy)
-print("Среднеквадратичное отклонение:", std_dev)
+# Сглаживание
+smoothed = cv.blur(gray_image_matrix, (3, 3))
+# Выделение линий
+line_kernel = np.array([[-1, -1, -1],
+                         [ 2,  2,  2],
+                         [-1, -1, -1]], dtype=np.float32)
+lines = cv.filter2D(gray_image_matrix, -1, line_kernel)
+# ВЧ фильтр
+sharp_kernel = np.array([[0, -1, 0],
+                          [-1, 5, -1],
+                          [0, -1, 0]], dtype=np.float32)
+hfq = cv.filter2D(gray_image_matrix, -1, sharp_kernel)
+# Фильтр Лапласа
+laplace = cv.Laplacian(gray_image_matrix, cv.CV_64F, ksize=3)
+laplace = cv.convertScaleAbs(laplace)
+# Медианный фильтр
+median = cv.medianBlur(gray_image_matrix, 3)
+# Перепад (Собель)
+gx = cv.Sobel(gray_image_matrix, cv.CV_64F, 1, 0, ksize=3)
+gy = cv.Sobel(gray_image_matrix, cv.CV_64F, 0, 1, ksize=3)
+grad = cv.magnitude(gx, gy)
+grad = cv.convertScaleAbs(grad)
 
-save_matrix_as_image(coded_matrix, 'coded_image.png')
+cv.imshow('Original image (bw) and Smoothing filter', np.hstack((gray_image_matrix, smoothed)))
+cv.imshow('Original image (bw) and Line extraction', np.hstack((gray_image_matrix, lines)))
+cv.imshow('Original image (bw) and High-pass filter', np.hstack((gray_image_matrix, hfq)))
+cv.imshow('Original image (bw) and Laplace filter', np.hstack((gray_image_matrix, laplace)))
+cv.imshow('Original image (bw) and Median filter', np.hstack((gray_image_matrix, median)))
+cv.imshow('Original image (bw) and Drop (Sobel)', np.hstack((gray_image_matrix, grad)))
 
-# Применение геометрических преобразований
-original_image = Image.open(image_path).convert('L')
-
-# Перенос
-translated_image = translate(original_image, tx=50, ty=30)
-translated_image.save('translated_image.png')
-
-# Поворот и гомотетия
-rotated_scaled_image = rotate_and_scale(original_image, angle=45, scale=1.5)
-rotated_scaled_image.save('rotated_scaled_image.png')
-
-# Гомотетия и поворот
-scaled_rotated_image = scale_and_rotate(original_image, scale=1.5, angle=45)
-scaled_rotated_image.save('scaled_rotated_image.png')
-
-# Применение фильтров
-filtered_median_3x3 = median_filter(original_image, size=3)
-filtered_median_5x5 = median_filter(original_image, size=5)
-filtered_median_7x7 = median_filter(original_image, size=7)
-
-# Сохранение отфильтрованных изображений
-filtered_median_3x3.save("filtered_median_3x3.jpg")
-filtered_median_5x5.save("filtered_median_5x5.jpg")
-filtered_median_7x7.save("filtered_median_7x7.jpg")
-
-# Сравнение
-mse_3x3 = calculate_mse(original_image, filtered_median_3x3)
-psnr_3x3 = calculate_psnr(original_image, filtered_median_3x3)
-
-mse_5x5 = calculate_mse(original_image, filtered_median_5x5)
-psnr_5x5 = calculate_psnr(original_image, filtered_median_5x5)
-
-mse_7x7 = calculate_mse(original_image, filtered_median_7x7)
-psnr_7x7 = calculate_psnr(original_image, filtered_median_7x7)
-
-print(f"MSE 3x3 (Среднеквадратичная ошибка): {mse_3x3}, PSNR (пиковое отношение сигнал/шум): {psnr_3x3}")
-print(f"MSE 5x5 (Среднеквадратичная ошибка): {mse_5x5}, PSNR (пиковое отношение сигнал/шум): {psnr_5x5}")
-print(f"MSE 7x7 (Среднеквадратичная ошибка): {mse_7x7}, PSNR (пиковое отношение сигнал/шум): {psnr_7x7}")
+cv.waitKey(0)
+cv.destroyAllWindows()
